@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Security
-from uuid import UUID
+from fastapi import APIRouter, UploadFile, File
 from typing import List
 
-router = APIRouter(tags=['health'])
+from libs.services.document_service import process_documents
+from libs.structures.documents import DocumentUploadResponse
 
-@router.get("/")
-def health():
-    return {"status": "ok"}
+router = APIRouter(tags=["documents"])
+
+@router.post("/", response_model=DocumentUploadResponse)
+def store(files: List[UploadFile] = File(...)):
+    return process_documents(files)
