@@ -1,0 +1,7 @@
+uvicorn>=0.31.0
+psycopg>=3.2.3
+psycopg-pool>=3.2.3
+python-dotenv>=1.0.1
+python-multipart>=0.0.12
+fastapi>=0.115.0
+fastapi-cli>=0.0.5
