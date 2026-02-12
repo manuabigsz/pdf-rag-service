@@ -78,7 +78,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("**Status da API**")
 
 try:
-    health = requests.get(f"{API_BASE_URL}/docs")
+    health = requests.get(f"{API_BASE_URL}/health")
     st.sidebar.success("✅")
 except Exception as e:
     st.sidebar.error("❌")
