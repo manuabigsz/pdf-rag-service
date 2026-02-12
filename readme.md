@@ -1,76 +1,86 @@
 ## PDF RAG Service
 
-Sistema de perguntas e respostas sobre PDFs usando Retrieval-Augmented Generation (RAG), com suporte a **OpenAI** e **Ollama** como provedores de LLM e embeddings.
+A question-and-answer system over PDFs using **Retrieval-Augmented Generation (RAG)**, with support for **OpenAI** and **Ollama** as LLM and embedding providers.
 
-O usuário faz upload de documentos PDF, o texto é extraído, fatiado em chunks, indexado em um vetor store (**Chroma** via LangChain) e depois perguntas são respondidas com base nesses documentos.
-
----
-
-### Arquitetura
-
-- **API**: `FastAPI` em `services/api`
-  - `POST /documents`: upload e indexação de PDFs
-  - `POST /question`: responde perguntas usando RAG (LLM + Chroma)
-  - `GET /health`: checagem de saúde simples
-- **Vector Store**: `Chroma` persistente em disco (`./data/chroma_*`)
-- **LLMs / Embeddings**:
-  - **OpenAI** (`gpt-4o-mini`, `text-embedding-3-small` por padrão)
-  - **Ollama** (`llama3.2:3b` + `nomic-embed-text` por padrão)
-- **UI opcional**: `Streamlit` em `services/ui/streamlit_app.py` para upload e perguntas via navegador.
+Users upload PDF documents, the text is extracted, split into chunks, indexed in a vector store (**Chroma** via LangChain), and questions are answered based on the indexed content.
 
 ---
 
-### Requisitos
+### Architecture
 
-- **Python 3.12+**
-- **Poetry ou pip/venv** (a depender do seu fluxo; o Dockerfile usa `pip` + `requirements.txt`)
-- **Docker** (opcional, mas recomendado para rodar a API)
-- Conta e chave de API da **OpenAI** (se usar OpenAI)
-- **Ollama** instalado e rodando localmente (se usar Ollama)
+* **API**: `FastAPI` in `services/api`
+
+  * `POST /documents`: upload and index PDFs
+  * `POST /question`: answer questions using RAG (LLM + Chroma)
+  * `GET /health`: simple health check
+* **Vector Store**: Persistent **Chroma** stored on disk (`./data/chroma_*`)
+* **LLMs / Embeddings**:
+
+  * **OpenAI** (`gpt-4o-mini`, `text-embedding-3-small` by default)
+  * **Ollama** (`llama3.2:3b` + `nomic-embed-text` by default)
+* **Optional UI**: `Streamlit` in `services/ui/streamlit_app.py` for browser-based uploads and questions.
 
 ---
 
-### Variáveis de ambiente
+### Requirements
 
-As principais variáveis estão centralizadas em `services/api/libs/utils/envs.py`:
+* **Python 3.12+**
+* **Poetry or pip/venv** (depending on your workflow; the Dockerfile uses `pip` + `requirements.txt`)
+* **Docker** (optional, but recommended to run the API)
+* **OpenAI API key** (if using OpenAI)
+* **Ollama** installed and running locally (if using Ollama)
 
-- **Seleção de provedores**
-  - `LLM_PROVIDER` (default: `openai`)  
-    - Valores possíveis: `openai`, `ollama`
-  - `EMBEDDING_PROVIDER` (default: `openai`)  
-    - Valores possíveis: `openai`, `ollama`
+---
 
-- **OpenAI**
-  - `OPENAI_API_KEY` **(obrigatório se usar OpenAI)**
-  - `OPENAI_LLM_MODEL` (default: `gpt-4o-mini`)
-  - `OPENAI_EMBEDDING_MODEL` (default: `text-embedding-3-small`)
+### Environment Variables
 
-- **Ollama**
-  - `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
-  - `OLLAMA_LLM_MODEL` (default: `llama3.2:3b`)
-  - `OLLAMA_EMBEDDING_MODEL` (default: `nomic-embed-text`)
+Main environment variables are centralized in `services/api/libs/utils/envs.py`:
 
-- **Chroma / RAG**
-  - `CHROMA_PERSIST_DIR` (default:  
-    - `./data/chroma_openai` quando `EMBEDDING_PROVIDER=openai`  
-    - `./data/chroma_ollama` quando `EMBEDDING_PROVIDER=ollama`
-  - `CHROMA_COLLECTION` (default: `documents`)
-  - **`CHUNK_SIZE`** (default: `1000`) – tamanho máximo, em caracteres, de cada pedaço (chunk) em que o texto do PDF é dividido antes de virar embedding. Chunks menores tendem a dar respostas mais precisas em trechos específicos; chunks maiores preservam mais contexto. Ajuste conforme o tipo de documento (ex.: 500–800 para manuais técnicos, 1200–1500 para textos longos).
-  - **`CHUNK_OVERLAP`** (default: `150`) – número de caracteres de sobreposição entre um chunk e o próximo, para evitar cortar frases no meio e melhorar a continuidade na busca.
-  - **`TOP_K`** (default: `10`) – quantos chunks mais similares à pergunta são recuperados e enviados ao LLM para montar a resposta.
+#### Provider Selection
 
-- **UI**
-  - `API_BASE_URL` (default: `http://localhost:8000`) – usado pelo Streamlit.
+* `LLM_PROVIDER` (default: `openai`)
 
-Sugestão de `.env`:
+  * Possible values: `openai`, `ollama`
+* `EMBEDDING_PROVIDER` (default: `openai`)
+
+  * Possible values: `openai`, `ollama`
+
+#### OpenAI
+
+* `OPENAI_API_KEY` **(required if using OpenAI)**
+* `OPENAI_LLM_MODEL` (default: `gpt-4o-mini`)
+* `OPENAI_EMBEDDING_MODEL` (default: `text-embedding-3-small`)
+
+#### Ollama
+
+* `OLLAMA_BASE_URL` (default: `http://localhost:11434`)
+* `OLLAMA_LLM_MODEL` (default: `llama3.2:3b`)
+* `OLLAMA_EMBEDDING_MODEL` (default: `nomic-embed-text`)
+
+#### Chroma / RAG
+
+* `CHROMA_PERSIST_DIR` (default:
+
+  * `./data/chroma_openai` when `EMBEDDING_PROVIDER=openai`
+  * `./data/chroma_ollama` when `EMBEDDING_PROVIDER=ollama`)
+* `CHROMA_COLLECTION` (default: `documents`)
+* **`CHUNK_SIZE`** (default: `1000`) – Maximum size, in characters, of each chunk the PDF text is split into before generating embeddings. Smaller chunks tend to produce more precise answers for specific passages; larger chunks preserve more context. Adjust based on document type (e.g., 500–800 for technical manuals, 1200–1500 for long-form text).
+* **`CHUNK_OVERLAP`** (default: `150`) – Number of overlapping characters between consecutive chunks to avoid cutting sentences in the middle and improve retrieval continuity.
+* **`TOP_K`** (default: `10`) – Number of most similar chunks retrieved and sent to the LLM to generate the final answer.
+
+#### UI
+
+* `API_BASE_URL` (default: `http://localhost:8000`) – Used by Streamlit.
+
+Example `.env`:
 
 ```bash
 OPENAI_API_KEY=xxxxx
 
-LLM_PROVIDER=ollama ou openai
-EMBEDDING_PROVIDER=ollama ou openai
+LLM_PROVIDER=ollama or openai
+EMBEDDING_PROVIDER=ollama or openai
 
-OLLAMA_BASE_URL=http://host.docker.internal:11434  # se rodando em Docker
+OLLAMA_BASE_URL=http://host.docker.internal:11434  # if running inside Docker
 OLLAMA_LLM_MODEL=llama3.2:3b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
@@ -79,84 +89,96 @@ TOP_K=10
 
 ---
 
-### Rodar com Ollama (modelos locais)
+### Running with Ollama (Local Models)
 
-Para usar **Ollama** como provedor de LLM e de embeddings (sem depender da OpenAI):
+To use **Ollama** as both LLM and embedding provider (without relying on OpenAI):
 
-1. **Instalar o Ollama**  
-   - Acesse [ollama.com](https://ollama.com) e baixe o instalador para o seu sistema.  
-   - Instale e deixe o Ollama rodando (no Windows/Mac costuma abrir em segundo plano; no Linux: `ollama serve`).
+#### 1. Install Ollama
 
-2. **Baixar os modelos**  
-   No terminal, rode:
+* Visit [https://ollama.com](https://ollama.com) and download the installer for your OS.
+* Install and keep Ollama running (on Windows/Mac it runs in the background; on Linux use `ollama serve`).
 
-   ```bash
-   # Modelo de linguagem (respostas)
-   ollama pull llama3.2:3b
+#### 2. Download the Models
 
-   # Modelo de embeddings (busca semântica nos PDFs)
-   ollama pull nomic-embed-text
-   ```
+Run in your terminal:
 
-   Se quiser usar outros modelos, altere no `.env`: `OLLAMA_LLM_MODEL` e `OLLAMA_EMBEDDING_MODEL`.
+```bash
+# Language model (for answers)
+ollama pull llama3.2:3b
 
-3. **Configurar o env**  
-   No `envs/api.dev.env` (ou no seu `.env`):
+# Embedding model (for semantic search)
+ollama pull nomic-embed-text
+```
 
-   ```bash
-   LLM_PROVIDER=ollama
-   EMBEDDING_PROVIDER=ollama
-   OLLAMA_BASE_URL=http://localhost:11434
-   OLLAMA_LLM_MODEL=llama3.2:3b
-   OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-   ```
+If you want to use different models, update `OLLAMA_LLM_MODEL` and `OLLAMA_EMBEDDING_MODEL` in your `.env`.
 
-4. **Se a API rodar dentro do Docker**  
-   O container precisa alcançar o Ollama na sua máquina. Use:
+#### 3. Configure the Environment
 
-   ```bash
-   OLLAMA_BASE_URL=http://host.docker.internal:11434
-   ```
+In `envs/api.dev.env` (or your `.env`):
 
-   (O `docker-compose` já define `host.docker.internal` para isso.)
+```bash
+LLM_PROVIDER=ollama
+EMBEDDING_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_LLM_MODEL=llama3.2:3b
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
 
-Depois disso, suba o stack com `docker-compose up --build` e use a UI ou os endpoints normalmente; o Ollama será usado para embeddings e para gerar as respostas.
+#### 4. If Running the API Inside Docker
+
+The container must reach Ollama running on your machine. Use:
+
+```bash
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+(The `docker-compose` file already configures `host.docker.internal` for this.)
+
+After that, start the stack with:
+
+```bash
+docker-compose up --build
+```
+
+The system will use Ollama for both embeddings and response generation.
 
 ---
 
-### Como rodar com Docker Compose (recomendado)
+### Running with Docker Compose (Recommended)
 
-O `docker-compose.yml` na raiz sobe **backend (API)** e **frontend (UI Streamlit)** juntos.
+The `docker-compose.yml` at the project root starts both **backend (API)** and **frontend (Streamlit UI)**.
 
-- Serviço **api**  
-  - Build em `./services/api` (usa `services/api/Dockerfile`)  
-  - Porta exposta: `8000` → `http://localhost:8000`  
-  - Carrega variáveis de `envs/api.dev.env`  
-  - Usa `uvicorn main:app --reload`
+#### API Service
 
-- Serviço **ui**  
-  - Build em `./services/ui`  
-  - Porta exposta: `8501` → `http://localhost:8501`  
-  - Usa `API_BASE_URL=http://api:8000` para falar com o backend no container
+* Build context: `./services/api` (uses `services/api/Dockerfile`)
+* Exposed port: `8000` → `http://localhost:8000`
+* Loads variables from `envs/api.dev.env`
+* Runs with: `uvicorn main:app --reload`
 
-Passos:
+#### UI Service
 
-1. **Configurar variáveis da API**
+* Build context: `./services/ui`
+* Exposed port: `8501` → `http://localhost:8501`
+* Uses `API_BASE_URL=http://api:8000` to communicate with the backend container
 
-   Copie `envs/api.dev.env.example` para `envs/api.dev.env` e preencha (ex.: `OPENAI_API_KEY`). Ajuste o provider (OpenAI ou Ollama) conforme a seção de variáveis de ambiente deste README.
+#### Steps
 
-2. **Subir todo o stack (API + UI)**
+1. **Configure API variables**
 
-   Na raiz do projeto (`pdf-rag-service`):
+   Copy `envs/api.dev.env.example` to `envs/api.dev.env` and fill in the required values (e.g., `OPENAI_API_KEY`). Adjust the provider (OpenAI or Ollama) as needed.
+
+2. **Start the full stack (API + UI)**
+
+   From the project root (`pdf-rag-service`):
 
    ```bash
    docker-compose up --build
    ```
 
-   - Backend: `http://localhost:8000`
-   - Frontend (Streamlit): `http://localhost:8501`
+   * Backend: [http://localhost:8000](http://localhost:8000)
+   * Frontend (Streamlit): [http://localhost:8501](http://localhost:8501)
 
-3. **Parar os serviços**
+3. **Stop services**
 
    ```bash
    docker-compose down
@@ -164,16 +186,16 @@ Passos:
 
 ---
 
-### Endpoints da API
+### API Endpoints
 
 #### `POST /documents`
 
-Faz upload de um ou mais PDFs e indexa os textos no Chroma.
+Uploads one or more PDFs and indexes their text into Chroma.
 
-- **Content-Type**: `multipart/form-data`
-- Campo: `files` (um ou mais arquivos PDF)
+* **Content-Type**: `multipart/form-data`
+* Field: `files` (one or more PDF files)
 
-Exemplo com `curl`:
+Example using `curl`:
 
 ```bash
 curl -X POST http://localhost:8000/documents/ \
@@ -181,7 +203,7 @@ curl -X POST http://localhost:8000/documents/ \
   -F "files=@manual2.pdf"
 ```
 
-Resposta esperada:
+Expected response:
 
 ```json
 {
@@ -191,48 +213,52 @@ Resposta esperada:
 }
 ```
 
+---
+
 #### `POST /question`
 
-Faz uma pergunta com base nos PDFs já indexados.
+Asks a question based on the already indexed PDFs.
 
-- **Content-Type**: `application/json`
+* **Content-Type**: `application/json`
 
 Body:
 
 ```json
 {
-  "question": "what to you know about ac dc motor installation and maintence?"
+  "question": "what do you know about AC/DC motor installation and maintenance?"
 }
 ```
 
-Exemplo com `curl`:
+Example using `curl`:
 
 ```bash
 curl -X POST http://localhost:8000/question/ \
   -H "Content-Type: application/json" \
-  -d '{"question": "what to you know about ac dc motor installation and maintence?"}'
+  -d '{"question": "what do you know about AC/DC motor installation and maintenance?"}'
 ```
 
-Resposta (exemplo):
+Example response:
 
 ```json
 {
   "answer": "The motor's power consumption is 2.3 kW.",
   "references": [
-    "the motor xxx has requires 2.3kw to operate at a 60hz line frequency"
+    "the motor xxx requires 2.3kw to operate at a 60hz line frequency"
   ]
 }
 ```
 
+---
+
 #### `GET /health`
 
-Endpoint simples para ver se a API está de pé:
+Simple endpoint to verify the API is running:
 
 ```bash
 curl http://localhost:8000/health/
 ```
 
-Resposta:
+Response:
 
 ```json
 { "status": "ok" }
@@ -240,12 +266,13 @@ Resposta:
 
 ---
 
-### Fluxo de uso
+### Usage Flow
 
-1. Suba a API (local ou via Docker), configurando o provider desejado (**OpenAI** ou **Ollama**).
-2. Envie PDFs para `/documents`.
-3. Faça perguntas para `/question`.
-4. Opcionalmente, use o Streamlit para uma experiência web completa.
+1. Start the API (locally or via Docker), configuring your desired provider (**OpenAI** or **Ollama**).
+2. Upload PDFs to `/documents`.
+3. Send questions to `/question`.
+4. Optionally, use the Streamlit UI for a full web-based experience.
+
 
 ---
 
