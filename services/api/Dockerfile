@@ -4,7 +4,6 @@ WORKDIR /opt/app
 
 COPY requirements.txt .
 RUN ["pip", "install", "-r", "requirements.txt"]
-RUN ["python", "-m", "spacy", "download", "pt_core_news_lg"]
 
 COPY . .
 
