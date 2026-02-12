@@ -55,9 +55,9 @@ As principais variáveis estão centralizadas em `services/api/libs/utils/envs.p
     - `./data/chroma_openai` quando `EMBEDDING_PROVIDER=openai`  
     - `./data/chroma_ollama` quando `EMBEDDING_PROVIDER=ollama`
   - `CHROMA_COLLECTION` (default: `documents`)
-  - `CHUNK_SIZE` (default: `1000`)
-  - `CHUNK_OVERLAP` (default: `150`)
-  - `TOP_K` (default: `10` documentos mais similares por pergunta)
+  - **`CHUNK_SIZE`** (default: `1000`) – tamanho máximo, em caracteres, de cada pedaço (chunk) em que o texto do PDF é dividido antes de virar embedding. Chunks menores tendem a dar respostas mais precisas em trechos específicos; chunks maiores preservam mais contexto. Ajuste conforme o tipo de documento (ex.: 500–800 para manuais técnicos, 1200–1500 para textos longos).
+  - **`CHUNK_OVERLAP`** (default: `150`) – número de caracteres de sobreposição entre um chunk e o próximo, para evitar cortar frases no meio e melhorar a continuidade na busca.
+  - **`TOP_K`** (default: `10`) – quantos chunks mais similares à pergunta são recuperados e enviados ao LLM para montar a resposta.
 
 - **UI**
   - `API_BASE_URL` (default: `http://localhost:8000`) – usado pelo Streamlit.
@@ -76,6 +76,51 @@ OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
 TOP_K=10
 ```
+
+---
+
+### Rodar com Ollama (modelos locais)
+
+Para usar **Ollama** como provedor de LLM e de embeddings (sem depender da OpenAI):
+
+1. **Instalar o Ollama**  
+   - Acesse [ollama.com](https://ollama.com) e baixe o instalador para o seu sistema.  
+   - Instale e deixe o Ollama rodando (no Windows/Mac costuma abrir em segundo plano; no Linux: `ollama serve`).
+
+2. **Baixar os modelos**  
+   No terminal, rode:
+
+   ```bash
+   # Modelo de linguagem (respostas)
+   ollama pull llama3.2:3b
+
+   # Modelo de embeddings (busca semântica nos PDFs)
+   ollama pull nomic-embed-text
+   ```
+
+   Se quiser usar outros modelos, altere no `.env`: `OLLAMA_LLM_MODEL` e `OLLAMA_EMBEDDING_MODEL`.
+
+3. **Configurar o env**  
+   No `envs/api.dev.env` (ou no seu `.env`):
+
+   ```bash
+   LLM_PROVIDER=ollama
+   EMBEDDING_PROVIDER=ollama
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_LLM_MODEL=llama3.2:3b
+   OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+   ```
+
+4. **Se a API rodar dentro do Docker**  
+   O container precisa alcançar o Ollama na sua máquina. Use:
+
+   ```bash
+   OLLAMA_BASE_URL=http://host.docker.internal:11434
+   ```
+
+   (O `docker-compose` já define `host.docker.internal` para isso.)
+
+Depois disso, suba o stack com `docker-compose up --build` e use a UI ou os endpoints normalmente; o Ollama será usado para embeddings e para gerar as respostas.
 
 ---
 
@@ -98,7 +143,7 @@ Passos:
 
 1. **Configurar variáveis da API**
 
-   Edite `envs/api.dev.env` conforme o provider desejado (OpenAI ou Ollama), seguindo a seção de variáveis de ambiente deste README.
+   Copie `envs/api.dev.env.example` para `envs/api.dev.env` e preencha (ex.: `OPENAI_API_KEY`). Ajuste o provider (OpenAI ou Ollama) conforme a seção de variáveis de ambiente deste README.
 
 2. **Subir todo o stack (API + UI)**
 
@@ -116,29 +161,6 @@ Passos:
    ```bash
    docker-compose down
    ```
-
----
-
-### Como rodar a UI (Streamlit)
-
-A UI é opcional, mas facilita o teste:
-
-```bash
-cd services/ui
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt  # ou inclua streamlit/requests em seu env
-```
-
-Garanta que a API está rodando em `http://localhost:8000` ou ajuste `API_BASE_URL`.
-
-Depois:
-
-```bash
-streamlit run streamlit_app.py
-```
-
-Acesse o endereço mostrado no terminal (por padrão `http://localhost:8501`).
 
 ---
 
@@ -179,7 +201,7 @@ Body:
 
 ```json
 {
-  "question": "What is the power consumption of the motor?"
+  "question": "what to you know about ac dc motor installation and maintence?"
 }
 ```
 
@@ -188,7 +210,7 @@ Exemplo com `curl`:
 ```bash
 curl -X POST http://localhost:8000/question/ \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is the power consumption of the motor?"}'
+  -d '{"question": "what to you know about ac dc motor installation and maintence?"}'
 ```
 
 Resposta (exemplo):
@@ -227,12 +249,26 @@ Resposta:
 
 ---
 
-### Critérios do desafio atendidos
+## 👨‍💻 Expert
 
-- **Upload e extração de PDFs**: via `pdfplumber` em `pdf_service`, com limpeza de texto.
-- **Chunking e embeddings**: `RecursiveCharacterTextSplitter` + embeddings configuráveis (OpenAI/Ollama) em `vector_service`.
-- **Armazenamento e recuperação**: `Chroma` persistente em disco, com `retriever` baseado em similaridade.
-- **LLM para respostas**: `ChatOpenAI` ou `ChatOllama`, com prompt estruturado e referências das fontes.
-- **API clara**: endpoints `/documents`, `/question`, `/health` com tipagem via Pydantic.
-- **Developer UX**: suporte a Docker, UI em Streamlit, configuração por variáveis de ambiente e este README com exemplos de requisição.
+<p>
+    <img 
+      align=left 
+      margin=10 
+      width=80 
+      src="https://avatars.githubusercontent.com/u/80135269?v=4"
+    />
+    <p>&nbsp&nbsp&nbspManuela Bertella Ossanes<br>
+    &nbsp&nbsp&nbsp
+    <a href="https://avatars.githubusercontent.com/u/80135269?v=4">
+    GitHub</a>&nbsp;|&nbsp;
+    <a href="https://www.linkedin.com/in/manuela-bertella-ossanes-690166204/">LinkedIn</a>
+&nbsp;|&nbsp;
+    <a href="https://www.instagram.com/manuossz/">
+    Instagram</a>
+&nbsp;|&nbsp;</p>
+</p>
+<br/><br/>
+<p>
 
+---
