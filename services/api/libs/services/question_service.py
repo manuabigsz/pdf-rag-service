@@ -1,13 +1,20 @@
-import os
 from typing import List, Tuple
 from loguru import logger
 
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 
 from libs.services.vector_service import get_retriever
+from libs.utils.envs import (
+    LLM_PROVIDER,
+    LLMProvider,
+    OLLAMA_BASE_URL,
+    OLLAMA_LLM_MODEL,
+    OPENAI_API_KEY,
+    OPENAI_LLM_MODEL,
+    TOP_K,
+)
 
-
-TOP_K = 10
 
 SYSTEM = (
     "You are a precise assistant that answers questions based on provided documents. "
@@ -21,12 +28,21 @@ _llm = None
 def _get_llm():
     global _llm
     if _llm is None:
-        _llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            temperature=0.3,
-            max_tokens=1000,
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-        )
+        if LLM_PROVIDER == LLMProvider.OLLAMA:
+            logger.info(f"Usando Ollama LLM: {OLLAMA_LLM_MODEL}")
+            _llm = ChatOllama(
+                model=OLLAMA_LLM_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                temperature=0.3,
+            )
+        else:  
+            logger.info(f"Usando OpenAI LLM: {OPENAI_LLM_MODEL}")
+            _llm = ChatOpenAI(
+                model=OPENAI_LLM_MODEL,
+                temperature=0.3,
+                max_tokens=1000,
+                openai_api_key=OPENAI_API_KEY,
+            )
     return _llm
 
 

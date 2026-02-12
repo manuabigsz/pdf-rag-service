@@ -1,19 +1,26 @@
-import os
 from typing import List
 from loguru import logger
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_openai import OpenAIEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from libs.utils.envs import (
+    EMBEDDING_PROVIDER,
+    EmbeddingProvider,
+    OLLAMA_BASE_URL,
+    OLLAMA_EMBEDDING_MODEL,
+    OPENAI_API_KEY,
+    OPENAI_EMBEDDING_MODEL,
+    CHROMA_PERSIST_DIR,
+    COLLECTION_NAME,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
+)
 
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma_db")
-COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "documents_1536")
-
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
 
 _embeddings: Embeddings | None = None
 _vector_store: Chroma | None = None
@@ -23,10 +30,18 @@ _text_splitter: RecursiveCharacterTextSplitter | None = None
 def _get_embeddings() -> Embeddings:
     global _embeddings
     if _embeddings is None:
-        _embeddings = OpenAIEmbeddings(
-            model="text-embedding-3-small",
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-        )
+        if EMBEDDING_PROVIDER == EmbeddingProvider.OLLAMA:
+            logger.info(f"Usando Ollama embeddings: {OLLAMA_EMBEDDING_MODEL}")
+            _embeddings = OllamaEmbeddings(
+                model=OLLAMA_EMBEDDING_MODEL,
+                base_url=OLLAMA_BASE_URL,
+            )
+        else:  
+            logger.info(f"Usando OpenAI embeddings: {OPENAI_EMBEDDING_MODEL}")
+            _embeddings = OpenAIEmbeddings(
+                model=OPENAI_EMBEDDING_MODEL,
+                openai_api_key=OPENAI_API_KEY,
+            )
     return _embeddings
 
 
