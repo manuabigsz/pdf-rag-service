@@ -1,168 +1,90 @@
-from uuid import UUID
-from typing import List
 import os
-import shutil
+from typing import List
 from loguru import logger
 
-import chromadb
-from chromadb.config import Settings
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-CHROMA_PERSIST_DIR = os.getenv(
-    "CHROMA_PERSIST_DIR", "./data/chroma_db"
-)
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma_db")
+COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "documents_1536")
 
-COLLECTION_NAME = os.getenv(
-    "CHROMA_COLLECTION", "documents"
-)
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 150
 
-_chroma_client = None
-_collection = None
+_embeddings: Embeddings | None = None
+_vector_store: Chroma | None = None
+_text_splitter: RecursiveCharacterTextSplitter | None = None
 
-def _get_collection():
-    global _chroma_client, _collection
 
-    if _collection is None:
-        _chroma_client = chromadb.PersistentClient(
-            path=CHROMA_PERSIST_DIR,
-            settings=Settings(
-                anonymized_telemetry=False,
-            )
+def _get_embeddings() -> Embeddings:
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = OpenAIEmbeddings(
+            model="text-embedding-3-small",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
         )
-
-        try:
-            existing_collections = _chroma_client.list_collections()
-            collection_exists = any(col.name == COLLECTION_NAME for col in existing_collections)
-            
-            if collection_exists:
-                temp_collection = _chroma_client.get_collection(name=COLLECTION_NAME)
-                
-                try:
-                    count = temp_collection.count()
-                    logger.info(f"Collection '{COLLECTION_NAME}' já existe com {count} itens")
-                    
-                    if count > 0:
-                        sample = temp_collection.peek(1)
-                        if sample and 'embeddings' in sample and sample['embeddings']:
-                            current_dim = len(sample['embeddings'][0])
-                            logger.info(f"Dimensão atual da collection: {current_dim}")
-                            
-                            if current_dim != 1536:
-                                logger.warning(f"Dimensão incompatível! Esperado 1536, atual {current_dim}")
-                                logger.warning("Deletando collection antiga...")
-                                _chroma_client.delete_collection(name=COLLECTION_NAME)
-                                collection_exists = False
-                    
-                except Exception as e:
-                    logger.warning(f"Erro ao verificar collection: {e}")
-                    logger.warning("Deletando collection antiga...")
-                    _chroma_client.delete_collection(name=COLLECTION_NAME)
-                    collection_exists = False
-            
-            if collection_exists:
-                _collection = _chroma_client.get_collection(name=COLLECTION_NAME)
-                logger.info(f"Usando collection existente: {COLLECTION_NAME}")
-            else:
-                _collection = _chroma_client.create_collection(
-                    name=COLLECTION_NAME,
-                    metadata={"hnsw:space": "cosine"} 
-                )
-                logger.info(f"Collection '{COLLECTION_NAME}' criada com sucesso")
-                
-        except Exception as e:
-            logger.error(f"Erro ao gerenciar collection: {e}")
-            raise
-
-    return _collection
+    return _embeddings
 
 
-def store_chunks(chunks: List[str], document_id: UUID) -> int:
-    from libs.providers.embeddings_provider import create_embeddings
+def get_text_splitter() -> RecursiveCharacterTextSplitter:
+    global _text_splitter
+    if _text_splitter is None:
+        _text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+    return _text_splitter
 
-    if not chunks:
-        logger.warning(f"Nenhum chunk para armazenar do documento {document_id}")
+
+def _get_vector_store() -> Chroma:
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = Chroma(
+            collection_name=COLLECTION_NAME,
+            embedding_function=_get_embeddings(),
+            persist_directory=CHROMA_PERSIST_DIR,
+        )
+        logger.info(f"Vector store LangChain Chroma inicializado: {COLLECTION_NAME}")
+    return _vector_store
+
+
+def add_documents(documents: List[Document]) -> int:
+    if not documents:
+        logger.warning("Nenhum documento para adicionar")
         return 0
-
-    collection = _get_collection()
-    
-    logger.info(f"Criando embeddings para {len(chunks)} chunks do documento {document_id}")
-    embeddings = create_embeddings(chunks)
-    
-    if len(embeddings) != len(chunks):
-        logger.error(f"Número de embeddings ({len(embeddings)}) diferente de chunks ({len(chunks)})")
-        raise ValueError("Mismatch entre número de chunks e embeddings")
-
-    ids = []
-    metadatas = []
-
-    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-        chunk_id = f"{document_id}_{idx}"
-        ids.append(chunk_id)
-
-        metadatas.append({
-            "document_id": str(document_id),
-            "chunk_index": idx,
-            "chunk_length": len(chunk),
-        })
-
-    logger.info(f"Adicionando {len(chunks)} chunks à collection")
-    
-    try:
-        collection.add(
-            ids=ids,
-            embeddings=embeddings,
-            documents=chunks,
-            metadatas=metadatas,
-        )
-        logger.info(f"✓ {len(chunks)} chunks armazenados com sucesso para documento {document_id}")
-    except Exception as e:
-        logger.error(f"Erro ao adicionar chunks ao ChromaDB: {e}")
-        raise
-
-    return len(chunks)
+    store = _get_vector_store()
+    ids = store.add_documents(documents)
+    n = len(ids) if ids else len(documents)
+    logger.info(f"✓ {n} chunks armazenados no Chroma (LangChain)")
+    return n
 
 
-def search_similar(query_embedding: List[float], top_k: int = 5) -> List[str]:
-    collection = _get_collection()
-    
-    total_items = collection.count()
-    logger.info(f"Buscando em {total_items} chunks armazenados")
-    
-    if total_items == 0:
-        logger.warning("Nenhum documento indexado ainda!")
-        return []
-    
-    actual_top_k = min(top_k, total_items)
-    
-    logger.info(f"Buscando top {actual_top_k} chunks mais relevantes")
+def get_retriever(top_k: int = 10):
+    store = _get_vector_store()
+    return store.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": top_k},
+    )
 
-    try:
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=actual_top_k,
-            include=["documents", "metadatas", "distances"]
-        )
-        
-        documents = results.get("documents", [[]])[0]
-        distances = results.get("distances", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-        
-        logger.info(f"Encontrados {len(documents)} chunks")
-        
-        for i, (doc, dist, meta) in enumerate(zip(documents, distances, metadatas)):
-            logger.debug(f"Chunk {i+1} (distância={dist:.4f}, doc_id={meta.get('document_id')}): {doc[:100]}...")
-        
-        return documents
-        
-    except Exception as e:
-        logger.error(f"Erro na busca: {e}")
-        raise
+
+def search_similar(query: str, top_k: int = 10) -> List[Document]:
+    retriever = get_retriever(top_k=top_k)
+    return retriever.invoke(query)
 
 
 def get_collection_stats() -> dict:
-    collection = _get_collection()
-    count = collection.count()
-    
+    store = _get_vector_store()
+    try:
+        count = store._collection.count()
+    except Exception as e:
+        logger.warning(f"Erro ao obter count da collection: {e}")
+        count = 0
     return {
         "total_chunks": count,
         "collection_name": COLLECTION_NAME,

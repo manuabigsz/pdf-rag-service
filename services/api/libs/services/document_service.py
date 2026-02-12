@@ -1,38 +1,48 @@
 from typing import List
 from fastapi import UploadFile
+from loguru import logger
+
+from langchain_core.documents import Document
 
 from libs.services.pdf_service import extract_text_from_pdf
-from libs.services.chunk_service import chunk_text
-from libs.services.vector_service import store_chunks
+from libs.services.vector_service import get_text_splitter, add_documents
+from libs.structures.documents import Document as DocModel, DocumentMetadata
 
-from libs.structures.documents import Document, DocumentMetadata
 
 def process_documents(files: List[UploadFile]) -> dict:
     documents = []
     total_chunks = 0
+    splitter = get_text_splitter()
 
     for file in files:
         metadata = DocumentMetadata(
             filename=file.filename,
             content_type=file.content_type,
-            size_bytes=None 
+            size_bytes=None,
         )
-
-        document = Document(metadata=metadata)
+        doc_model = DocModel(metadata=metadata)
 
         text = extract_text_from_pdf(file)
-        document.text = text
+        if not text or len(text.strip()) < 50:
+            logger.warning(f"Documento {file.filename} vazio ou muito curto, ignorando")
+            continue
 
-        chunks = chunk_text(text)
-        document.total_chunks = len(chunks)
+        lc_doc = Document(
+            page_content=text,
+            metadata={
+                "document_id": str(doc_model.id),
+                "source": file.filename or "unknown",
+            },
+        )
+        chunks = splitter.split_documents([lc_doc])
+        doc_model.total_chunks = len(chunks)
 
-        stored = store_chunks(chunks, document.id)
-
+        stored = add_documents(chunks)
         total_chunks += stored
-        documents.append(document)
+        documents.append(doc_model)
 
     return {
         "message": "Documents processed successfully",
         "documents_indexed": len(documents),
-        "total_chunks": total_chunks
+        "total_chunks": total_chunks,
     }
