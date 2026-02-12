@@ -3,7 +3,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import time
 import traceback
-import psycopg
 from routes import get_routers
 
 app = FastAPI(redirect_slashes=True)
@@ -36,21 +35,12 @@ async def custom_response(request: Request, call_next):
     try:
         resp: Response = await call_next(request)
 
-    except psycopg.OperationalError:
+    except Exception:
         traceback.print_exc()
-        resp = JSONResponse(status_code=500, content={"detail": "Database communication link failure."})
-
-    except psycopg.errors.UniqueViolation:
-        traceback.print_exc()
-        resp = JSONResponse(status_code=403, content={"detail": "A record already exists with that information."})
-
-    except psycopg.errors.IntegrityConstraintViolation:
-        traceback.print_exc()
-        resp = JSONResponse(status_code=403, content={"detail": "Failed to perform action: Integrity violation."})
-
-    except psycopg.DatabaseError:
-        traceback.print_exc()
-        resp = JSONResponse(status_code=500, content={"detail": "Unspecified database-related error."})
+        resp = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error."}
+        )
 
     process_time = time.time() - start_time
     resp.headers['X-Process-Time'] = f"{int(process_time * 1000)}ms"
