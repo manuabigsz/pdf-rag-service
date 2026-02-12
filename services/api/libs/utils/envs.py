@@ -27,7 +27,7 @@ else:
     CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./data/chroma_openai")
     COLLECTION_NAME = os.getenv("CHROMA_COLLECTION", "documents")
 
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 150
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
 
-TOP_K = 10
+TOP_K = int(os.getenv("TOP_K", "10"))
